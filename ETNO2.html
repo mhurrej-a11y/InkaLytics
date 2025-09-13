@@ -1,0 +1,658 @@
+<<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Ethno-Analytica — Prototipo (único archivo)</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body { background:#f5f7fb; font-family: system-ui, Arial, sans-serif; }
+        .sidebar { height:100vh; position:fixed; width:240px; left:0; top:0; padding:1rem; background:#0f172a; color:#fff; }
+        .main { margin-left:260px; padding:1.2rem; }
+        .nav-link { color:rgba(255,255,255,0.9); }
+        .nav-link.active { background: rgba(255,255,255,0.06); border-radius:6px; }
+        .card { margin-bottom:1rem; }
+        #map { height:330px; border-radius:6px; }
+        #calendar { max-width:900px; margin:0 auto; }
+        .tag { display:inline-block; background:#e6f2ff; padding:2px 8px; border-radius:999px; color:#035; margin-right:6px; margin-bottom:6px; }
+        .small-muted{ font-size:.85rem; color:#94a3b8; }
+        .panel { display: none; }
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar d-flex flex-column">
+        <h3 class="mb-2">Ethno-Analytica</h3>
+        <div class="small-muted mb-3">Prototipo — todo en 1 archivo</div>
+
+        <ul class="nav nav-pills flex-column mb-auto" id="menu">
+            <li class="nav-item"><a class="nav-link active" data-target="dash" href="#">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="notes" href="#">Entrevistas / Notas</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="map" href="#">Mapa</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="calendar" href="#">Calendario</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="participants" href="#">Participantes</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="export" href="#">Export / Devolución</a></li>
+            <li class="nav-item"><a class="nav-link" data-target="settings" href="#">Configuración</a></li>
+        </ul>
+
+        <hr style="border-color:rgba(255,255,255,0.06)" />
+
+        <div class="mb-2">
+            <div class="small-muted">Acceso (perfiles de prueba)</div>
+            <select id="loginProfile" class="form-select form-select-sm my-1">
+                <option value="invitado">Invitado</option>
+                <option value="investigador">Investigador</option>
+                <option value="colaborador">Colaborador</option>
+                <option value="comunidad">Comunidad</option>
+            </select>
+            <div class="d-grid gap-1">
+                <button id="btnDoLogin" class="btn btn-sm btn-success">Ingresar</button>
+                <button id="btnLogout" class="btn btn-sm btn-danger mt-1" style="display:none">Cerrar sesión</button>
+            </div>
+        </div>
+
+        <div class="mt-auto small-muted">Datos locales (localStorage)</div>
+        <button id="btnResetLocal" class="btn btn-sm btn-outline-secondary mt-2">Reset datos (dev)</button>
+    </aside>
+
+    <main class="main">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4 id="title">Dashboard</h4>
+                <div class="small-muted">Usuario: <span id="uiEmail">—</span> • Rol: <b id="uiRole">—</b></div>
+            </div>
+            <div>
+                <button id="btnExportAllJSON" class="btn btn-outline-primary btn-sm">Exportar todo (JSON)</button>
+            </div>
+        </div>
+
+        <section id="panel-dash" class="panel card p-3">
+            <h5>Dashboard</h5>
+            <div class="row">
+                <div class="col-md-6"><canvas id="chartCommunities" height="170"></canvas></div>
+                <div class="col-md-6"><canvas id="chartTags" height="170"></canvas></div>
+            </div>
+            <hr />
+            <h6>Últimas entrevistas/notas</h6>
+            <ul id="timeline" class="list-group"></ul>
+        </section>
+
+        <section id="panel-notes" class="panel card p-3">
+            <h5>Entrevistas / Notas de campo</h5>
+            <div class="row g-2">
+                <div class="col-lg-8">
+                    <textarea id="noteText" rows="6" class="form-control" placeholder="Transcribe la entrevista o apunta observaciones..."></textarea>
+                    <div class="d-flex gap-2 mt-2">
+                        <button id="btnStartRecord" class="btn btn-sm btn-outline-danger">🎙️ Grabar</button>
+                        <button id="btnStopRecord" class="btn btn-sm btn-danger" style="display:none;">🔴 Detener</button>
+                        <button id="btnPlayRecord" class="btn btn-sm btn-secondary" style="display:none;">▶️ Reproducir</button>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <input id="noteName" class="form-control mb-2" placeholder="Nombre entrevistado">
+                    <input id="noteCommunity" class="form-control mb-2" placeholder="Comunidad">
+                    <input id="noteDate" type="date" class="form-control mb-2">
+                    <input id="noteTags" class="form-control mb-2" placeholder="Etiquetas (coma separadas)">
+                    <div class="d-grid gap-2">
+                        <button id="btnSaveNote" class="btn btn-primary">Guardar entrevista/nota</button>
+                        <button id="btnClearNote" class="btn btn-secondary">Limpiar</button>
+                    </div>
+                </div>
+            </div>
+
+            <hr />
+            <div class="row">
+                <div class="col-md-3">
+                    <h6>Filtros</h6>
+                    <input id="filterText" class="form-control mb-2" placeholder="Texto...">
+                    <input id="filterCommunity" class="form-control mb-2" placeholder="Comunidad...">
+                    <input id="filterTag" class="form-control mb-2" placeholder="Etiqueta...">
+                    <input id="filterFrom" type="date" class="form-control mb-2">
+                    <input id="filterTo" type="date" class="form-control mb-2">
+                    <div class="d-grid gap-2">
+                        <button id="btnApplyFilters" class="btn btn-outline-primary btn-sm">Aplicar</button>
+                        <button id="btnResetFilters" class="btn btn-outline-secondary btn-sm">Reset filtros</button>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6>Resultados</h6>
+                        <div>
+                            <button id="btnExportCSV" class="btn btn-sm btn-outline-primary">Export CSV</button>
+                            <button id="btnExportJSON" class="btn btn-sm btn-outline-secondary">Export JSON</button>
+                            <button id="btnExportPDF" class="btn btn-sm btn-outline-success">Exportar PDF (filtrado)</button>
+                        </div>
+                    </div>
+                    <ul id="notesList" class="list-group"></ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-map" class="panel card p-3">
+            <h5>Mapa interactivo</h5>
+            <div class="small-muted mb-2">Haz clic en el mapa para crear un marcador temporal; luego guarda. Marcadores se guardan por usuario (localStorage).</div>
+            <div id="map"></div>
+            <div class="mt-2 d-flex gap-2">
+                <button id="btnSaveMarker" class="btn btn-primary">Guardar marcador</button>
+                <button id="btnLoadMarkers" class="btn btn-secondary">Cargar mis marcadores</button>
+                <button id="btnClearMarkers" class="btn btn-outline-danger">Borrar mis marcadores</button>
+            </div>
+        </section>
+
+        <section id="panel-calendar" class="panel card p-3">
+            <h5>Calendario de actividades</h5>
+            <div id="calendar"></div>
+        </section>
+
+        <section id="panel-participants" class="panel card p-3">
+            <h5>Participantes y consentimiento</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <input id="pName" class="form-control mb-2" placeholder="Nombre participante">
+                    <input id="pAge" type="number" class="form-control mb-2" placeholder="Edad">
+                    <input id="pLang" class="form-control mb-2" placeholder="Idioma">
+                    <input id="pCommunity" class="form-control mb-2" placeholder="Comunidad">
+                    <input id="consentFile" type="file" accept="image/*" class="form-control mb-2">
+                    <div class="d-grid gap-2">
+                        <button id="btnSaveParticipant" class="btn btn-primary">Guardar ficha</button>
+                        <button id="btnClearParticipant" class="btn btn-secondary">Limpiar</button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Participantes guardados</h6>
+                    <ul id="participantsList" class="list-group"></ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-export" class="panel card p-3">
+            <h5>Exportaciones / Devolución</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <button id="btnExportFilteredCSV" class="btn btn-outline-primary mb-2">Exportar CSV (filtrado)</button>
+                    <button id="btnExportFilteredJSON" class="btn btn-outline-secondary mb-2">Exportar JSON (filtrado)</button>
+                    <button id="btnGenerateSummaryPDF" class="btn btn-primary mb-2">Generar resumen comunitario (PDF)</button>
+                </div>
+                <div class="col-md-6">
+                    <select id="ttsVoices" class="form-select mb-2"></select>
+                    <textarea id="ttsText" class="form-control mb-2" rows="4" placeholder="Texto para TTS..."></textarea>
+                    <div class="d-grid gap-2">
+                        <button id="btnSpeak" class="btn btn-success">Reproducir (TTS)</button>
+                        <button id="btnStopSpeak" class="btn btn-danger">Detener</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-settings" class="panel card p-3">
+            <h5>Configuración / Seguridad</h5>
+            <p class="small-muted">Aquí se podrá conectar Firebase o configurar backups y cifrado.</p>
+            <button id="btnConfigureFirebase" class="btn btn-outline-primary">Conectar Firebase (pendiente)</button>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        /* ============================
+         Keys and state
+         ============================ */
+        const KEYS = {
+            NOTES: 'ethno_notes_v2',
+            PARTICIPANTS: 'ethno_participants_v2',
+            EVENTS: 'ethno_events_v2',
+            MARKERS_PREFIX: 'ethno_markers_v2_' // + sanitized email
+        };
+        const TEST_USERS = {
+            'investigador': { email: 'investigador@etno.com', role: 'investigador' },
+            'colaborador': { email: 'colaborador@etno.com', role: 'colaborador' },
+            'comunidad': { email: 'comunidad@etno.com', role: 'comunidad' },
+            'invitado': { email: 'invitado@etno.com', role: 'invitado' }
+        };
+        let currentUser = TEST_USERS['invitado'];
+        let notes = JSON.parse(localStorage.getItem(KEYS.NOTES) || '[]');
+        let participants = JSON.parse(localStorage.getItem(KEYS.PARTICIPANTS) || '[]');
+        let calendar = null;
+        let map = null;
+        let tmpMarker = null;
+        let userMarkers = [];
+        let recorder = null;
+        let audioChunks = [];
+
+        /* ============================
+         Navigation & panels
+         ============================ */
+        document.querySelectorAll('#menu .nav-link').forEach(a=>{
+            a.addEventListener('click', e=>{
+                e.preventDefault();
+                document.querySelectorAll('#menu .nav-link').forEach(x=>x.classList.remove('active'));
+                a.classList.add('active');
+                const target = a.getAttribute('data-target');
+                showPanel(target);
+            });
+        });
+        function showPanel(name){
+            document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+            const id = 'panel-' + name;
+            const el = document.getElementById(id);
+            if(el) el.style.display='block';
+            document.getElementById('title').innerText = name.charAt(0).toUpperCase() + name.slice(1);
+            if(name === 'map') initMap();
+            if(name === 'calendar') initCalendar();
+            if(name === 'notes') renderNotes(notes);
+            if(name === 'participants') renderParticipants();
+            if(name === 'dash') updateDashboard();
+        }
+
+        /* ============================
+         Login / Logout
+         ============================ */
+        document.getElementById('btnDoLogin').addEventListener('click', ()=>{
+            const profileKey = document.getElementById('loginProfile').value;
+            currentUser = TEST_USERS[profileKey];
+            document.getElementById('uiEmail').innerText = currentUser.email;
+            document.getElementById('uiRole').innerText = currentUser.role;
+            document.getElementById('btnLogout').style.display = 'inline-block';
+            document.getElementById('btnDoLogin').style.display = 'none';
+            loadUserMarkers();
+            document.querySelector('#menu .nav-link.active')?.click();
+        });
+        document.getElementById('btnLogout').addEventListener('click', ()=>{
+            currentUser = TEST_USERS['invitado'];
+            document.getElementById('uiEmail').innerText='—'; document.getElementById('uiRole').innerText='—';
+            document.getElementById('btnLogout').style.display='none';
+            document.getElementById('btnDoLogin').style.display='inline-block';
+        });
+
+        /* Reset local */
+        document.getElementById('btnResetLocal').addEventListener('click', ()=>{
+            if(!confirm('Eliminar todos los datos locales?')) return;
+            localStorage.removeItem(KEYS.NOTES); localStorage.removeItem(KEYS.PARTICIPANTS); localStorage.removeItem(KEYS.EVENTS);
+            Object.keys(localStorage).forEach(k=>{ if(k.startsWith(KEYS.MARKERS_PREFIX)) localStorage.removeItem(k); });
+            notes = []; participants = []; userMarkers = []; if(calendar) { calendar.removeAllEvents(); persistEvents(); }
+            renderNotes(notes); renderParticipants(); updateDashboard();
+            alert('Datos locales eliminados.');
+        });
+
+        /* ============================
+         NOTES: create, list, filter, export
+         ============================ */
+        document.getElementById('btnSaveNote').addEventListener('click', ()=>{
+            if(!currentUser || currentUser.role === 'comunidad' || currentUser.role === 'invitado'){ alert('Solo investigadores o administradores pueden crear notas'); return; }
+            const text = document.getElementById('noteText').value.trim();
+            if(!text) { alert('Escribe la nota'); return; }
+            const n = {
+                id: Date.now(),
+                author: currentUser.email,
+                name: document.getElementById('noteName').value.trim(),
+                community: document.getElementById('noteCommunity').value.trim(),
+                date: document.getElementById('noteDate').value || new Date().toISOString().slice(0,10),
+                tags: (document.getElementById('noteTags').value || '').split(',').map(t=>t.trim()).filter(Boolean),
+                text
+            };
+            notes.unshift(n);
+            localStorage.setItem(KEYS.NOTES, JSON.stringify(notes));
+
+            // Save audio file if exists
+            if (audioChunks.length > 0) {
+                const blob = new Blob(audioChunks, { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `entrevista_${n.id}.wav`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                audioChunks = [];
+            }
+
+            document.getElementById('noteText').value=''; document.getElementById('noteName').value=''; document.getElementById('noteCommunity').value=''; document.getElementById('noteDate').value=''; document.getElementById('noteTags').value='';
+            renderNotes(notes); updateDashboard();
+        });
+
+        document.getElementById('btnClearNote').addEventListener('click', ()=>{ document.getElementById('noteText').value=''; document.getElementById('noteName').value=''; document.getElementById('noteCommunity').value=''; document.getElementById('noteDate').value=''; document.getElementById('noteTags').value=''; });
+
+        document.getElementById('btnApplyFilters').addEventListener('click', applyFilters);
+        document.getElementById('btnResetFilters').addEventListener('click', ()=>{
+            document.getElementById('filterText').value=''; document.getElementById('filterCommunity').value=''; document.getElementById('filterTag').value=''; document.getElementById('filterFrom').value=''; document.getElementById('filterTo').value='';
+            renderNotes(notes); updateDashboard();
+        });
+
+        function applyFilters(){
+            const q = (document.getElementById('filterText').value||'').toLowerCase();
+            const comm = (document.getElementById('filterCommunity').value||'').toLowerCase();
+            const tag = (document.getElementById('filterTag').value||'').toLowerCase();
+            const from = document.getElementById('filterFrom').value;
+            const to = document.getElementById('filterTo').value;
+            const res = notes.filter(n=>{
+                if(q && !(n.text.toLowerCase().includes(q) || (n.name||'').toLowerCase().includes(q))) return false;
+                if(comm && !(n.community||'').toLowerCase().includes(comm)) return false;
+                if(tag && !(n.tags||[]).map(t=>t.toLowerCase()).includes(tag)) return false;
+                if(from && n.date < from) return false;
+                if(to && n.date > to) return false;
+                return true;
+            });
+            window.lastFilteredNotes = res;
+            renderNotes(res); updateDashboard(res);
+        }
+
+        function renderNotes(list){
+            const arr = list || notes;
+            const ul = document.getElementById('notesList'); ul.innerHTML='';
+            arr.forEach(n=>{
+                const li = document.createElement('li'); li.className='list-group-item';
+                const tagsHtml = (n.tags||[]).map(t=>`<span class="tag">${escapeHtml(t)}</span>`).join(' ');
+                li.innerHTML = `<div><strong>${escapeHtml(n.name||'—')}</strong> <span class="small-muted">(${escapeHtml(n.community||'—')}) • ${n.date} • autor: ${escapeHtml(n.author)}</span></div>
+                                 <div style="margin-top:6px">${escapeHtml(n.text)}</div>
+                                 <div class="mt-2">${tagsHtml}</div>
+                                 <div class="mt-2 text-end">${(currentUser && (currentUser.role==='investigador' || currentUser.role==='administrador')) ? `<button class="btn btn-sm btn-danger" onclick="deleteNote(${n.id})">Eliminar</button>` : ''} <button class="btn btn-sm btn-outline-secondary" onclick="ttsReadNote(${n.id})">Leer (TTS)</button></div>`;
+                ul.appendChild(li);
+            });
+        }
+        function deleteNote(id){
+            if(!confirm('Eliminar nota?')) return;
+            notes = notes.filter(x=>x.id!==id);
+            localStorage.setItem(KEYS.NOTES, JSON.stringify(notes));
+            renderNotes(notes); updateDashboard();
+        }
+
+        /* Exports (notes) */
+        document.getElementById('btnExportCSV').addEventListener('click', ()=> exportCSV(window.lastFilteredNotes || notes));
+        document.getElementById('btnExportJSON').addEventListener('click', ()=> exportJSON(window.lastFilteredNotes || notes));
+        document.getElementById('btnExportPDF').addEventListener('click', ()=> exportPDF(window.lastFilteredNotes || notes));
+        function exportCSV(list){
+            if(!currentUser || (currentUser.role!=='investigador' && currentUser.role!=='administrador')) { alert('Solo investigadores/administradores pueden exportar'); return; }
+            if(!list || !list.length){ alert('No hay notas para exportar'); return; }
+            let csv = 'id,author,name,community,date,tags,text\n';
+            list.forEach(n=> csv += `${n.id},"${n.author}","${(n.name||'').replace(/"/g,'""')}","${(n.community||'').replace(/"/g,'""')}","${n.date}","${(n.tags||[]).join('|').replace(/"/g,'""')}","${(n.text||'').replace(/"/g,'""')}"\n`);
+            download('notas_export.csv', csv, 'text/csv');
+        }
+        function exportJSON(list){
+            if(!currentUser || (currentUser.role!=='investigador' && currentUser.role!=='administrador')) { alert('Solo investigadores/administradores pueden exportar'); return; }
+            download('notas_export.json', JSON.stringify(list, null, 2), 'application/json');
+        }
+        function exportPDF(list){
+            if(!list || !list.length){ alert('No hay notas para exportar'); return; }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(12); doc.text('Resumen entrevistas', 10, 10);
+            let y=18;
+            list.forEach((n,i)=>{
+                const text = `${i+1}. ${n.name||'(sin nombre)'} — ${n.community||'—'} (${n.date})\n${n.text}`;
+                const spl = doc.splitTextToSize(text, 180);
+                if(y + spl.length*6 > 280){ doc.addPage(); y=10; }
+                doc.text(spl, 10, y); y += spl.length*6 + 4;
+            });
+            doc.save('resumen_notas.pdf');
+        }
+
+        /* ============================
+         MAP: Leaflet markers persisted per-user
+         ============================ */
+        function initMap(){
+            if(map) return;
+            map = L.map('map').setView([-15.84, -70.02], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+            // default markers
+            L.marker([-15.84, -70.02]).addTo(map).bindPopup('Puno');
+            L.marker([-15.65, -69.71]).addTo(map).bindPopup('Amantaní');
+
+            map.on('click', e=>{
+                if(tmpMarker) map.removeLayer(tmpMarker);
+                tmpMarker = L.marker(e.latlng, { draggable:true }).addTo(map).bindPopup('Marcador temporal, arrástralo si quieres. Pulsa "Guardar marcador" para persistir.').openPopup();
+            });
+        }
+
+        document.getElementById('btnSaveMarker').addEventListener('click', ()=>{
+            if(!currentUser) return alert('Ingresa primero');
+            if(!tmpMarker) return alert('Haz clic en el mapa para crear un marcador temporal');
+            const latlng = tmpMarker.getLatLng();
+            const title = prompt('Título del marcador (ej: Comunidad X)', 'Comunidad') || 'Comunidad';
+            const m = { id: Date.now(), lat: latlng.lat, lng: latlng.lng, title };
+            userMarkers.push(m);
+            saveUserMarkers();
+            renderUserMarkers();
+            map.removeLayer(tmpMarker); tmpMarker = null;
+        });
+        document.getElementById('btnLoadMarkers').addEventListener('click', ()=>{ loadUserMarkers(); renderUserMarkers(); });
+        document.getElementById('btnClearMarkers').addEventListener('click', ()=>{ if(!currentUser) return alert('Ingresa primero'); if(!confirm('Borrar todos tus marcadores?')) return; userMarkers = []; saveUserMarkers(); renderUserMarkers(); });
+
+        function markersKey(){ return KEYS.MARKERS_PREFIX + (currentUser ? sanitize(currentUser.email) : 'anon'); }
+        function saveUserMarkers(){ localStorage.setItem(markersKey(), JSON.stringify(userMarkers)); }
+        function loadUserMarkers(){ if(!currentUser) return; userMarkers = JSON.parse(localStorage.getItem(markersKey()) || '[]'); }
+        function renderUserMarkers(){
+            if(!map) initMap();
+            // remove previous user markers (we tag them)
+            map.eachLayer(layer => {
+                if(layer instanceof L.Marker && layer.options && layer.options._ethno_user) map.removeLayer(layer);
+            });
+            userMarkers.forEach(m => {
+                const mk = L.marker([m.lat,m.lng], { _ethno_user:true }).addTo(map).bindPopup(m.title + '<br/><small class="small-muted">Guardado local</small>');
+            });
+        }
+
+        /* ============================
+         CALENDAR (FullCalendar) — events persisted
+         ============================ */
+        function initCalendar(){
+            if(calendar) return;
+            const el = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(el, {
+                initialView: 'dayGridMonth',
+                selectable: true,
+                select: info=>{
+                    if(!currentUser || currentUser.role === 'comunidad' || currentUser.role === 'invitado'){ alert('Solo investigadores/administradores pueden crear eventos'); calendar.unselect(); return; }
+                    const title = prompt('Título del evento (ej: entrevista en Pucará):');
+                    if(title){ calendar.addEvent({ title, start: info.startStr }); persistEvents(); }
+                    calendar.unselect();
+                },
+                events: loadEvents()
+            });
+            calendar.render();
+        }
+        function persistEvents(){ const evs = calendar.getEvents().map(e=>({ title:e.title, start:e.startStr })); localStorage.setItem(KEYS.EVENTS, JSON.stringify(evs)); }
+        function loadEvents(){ try{ return JSON.parse(localStorage.getItem(KEYS.EVENTS) || '[]'); }catch(e){ return []; } }
+
+        /* ============================
+         PARTICIPANTS (basic) — store base64 consent images
+         ============================ */
+        document.getElementById('btnSaveParticipant').addEventListener('click', async ()=>{
+            if(!currentUser || (currentUser.role !== 'investigador' && currentUser.role !== 'administrador')) return alert('Solo investigadores/administradores pueden añadir participantes');
+            const name = document.getElementById('pName').value.trim(); if(!name) return alert('Nombre requerido');
+            const p = { id: Date.now(), name, age: document.getElementById('pAge').value, lang: document.getElementById('pLang').value, community: document.getElementById('pCommunity').value, addedBy: currentUser.email };
+            const file = document.getElementById('consentFile').files[0];
+            if(file) p.consent = await fileToBase64(file);
+            participants.unshift(p); localStorage.setItem(KEYS.PARTICIPANTS, JSON.stringify(participants));
+            renderParticipants();
+            document.getElementById('pName').value=''; document.getElementById('pAge').value=''; document.getElementById('pLang').value=''; document.getElementById('pCommunity').value=''; document.getElementById('consentFile').value='';
+        });
+        document.getElementById('btnClearParticipant').addEventListener('click', ()=>{ document.getElementById('pName').value=''; document.getElementById('pAge').value=''; document.getElementById('pLang').value=''; document.getElementById('pCommunity').value=''; document.getElementById('consentFile').value=''; });
+
+        function renderParticipants(){
+            participants = JSON.parse(localStorage.getItem(KEYS.PARTICIPANTS) || '[]');
+            const ul = document.getElementById('participantsList'); ul.innerHTML='';
+            participants.forEach(p=>{
+                const li = document.createElement('li'); li.className='list-group-item';
+                li.innerHTML = `<strong>${escapeHtml(p.name)}</strong> <div class="small-muted">Comunidad: ${escapeHtml(p.community||'—')} • Idioma: ${escapeHtml(p.lang||'—')} • Añadido por: ${escapeHtml(p.addedBy||'—')}</div>${p.consent?`<div style="margin-top:8px"><img src="${p.consent}" style="max-width:140px;border-radius:6px;border:1px solid #ddd"></div>`:''}`;
+                ul.appendChild(li);
+            });
+        }
+
+        /* ============================
+         Dashboard charts + timeline
+         ============================ */
+        let chartCommunities=null, chartTags=null;
+        function updateDashboard(list){
+            const arr = list || notes;
+            // communities
+            const byComm = {};
+            arr.forEach(n=> { const c = n.community || 'Sin comunidad'; byComm[c] = (byComm[c]||0)+1; });
+            const labels = Object.keys(byComm), data = Object.values(byComm);
+            const ctx1 = document.getElementById('chartCommunities').getContext('2d');
+            if(chartCommunities) chartCommunities.destroy();
+            chartCommunities = new Chart(ctx1, { type:'bar', data:{ labels, datasets:[{ label:'Entrevistas por comunidad', data, backgroundColor:'#60a5fa' }] } });
+
+            // tags
+            const tagCount = {};
+            arr.forEach(n=> (n.tags||[]).forEach(t=> tagCount[t] = (tagCount[t]||0)+1));
+            const lab2 = Object.keys(tagCount), dat2 = Object.values(tagCount);
+            const ctx2 = document.getElementById('chartTags').getContext('2d');
+            if(chartTags) chartTags.destroy();
+            chartTags = new Chart(ctx2, { type:'pie', data:{ labels:lab2, datasets:[{ data:dat2 }] } });
+
+            // timeline
+            const tl = document.getElementById('timeline'); tl.innerHTML='';
+            (arr.slice(0,10)).forEach(n=>{
+                const li = document.createElement('li'); li.className='list-group-item';
+                li.innerHTML = `<strong>${escapeHtml(n.name||'—')}</strong> <span class="small-muted">(${escapeHtml(n.community||'—')}) · ${n.date}</span><div>${escapeHtml(n.text.substring(0,140))}${n.text.length>140?'...':''}</div>`;
+                tl.appendChild(li);
+            });
+        }
+
+        /* ============================
+         Export filtered (from Export panel)
+         ============================ */
+        document.getElementById('btnExportFilteredCSV').addEventListener('click', ()=> exportCSV(window.lastFilteredNotes || notes));
+        document.getElementById('btnExportFilteredJSON').addEventListener('click', ()=> exportJSON(window.lastFilteredNotes || notes));
+        document.getElementById('btnGenerateSummaryPDF').addEventListener('click', ()=> exportPDF(window.lastFilteredNotes || notes));
+        document.getElementById('btnExportAllJSON').addEventListener('click', ()=>{
+            if(!currentUser) return alert('Ingresa primero');
+            const data = { notes, participants, events: loadEvents(), markers: collectAllMarkers() };
+            download('ethno_all_data.json', JSON.stringify(data, null, 2), 'application/json');
+        });
+
+        /* ============================
+         TTS
+         ============================ */
+        const synth = window.speechSynthesis;
+        function populateVoices(){ const sel=document.getElementById('ttsVoices'); sel.innerHTML=''; synth.getVoices().forEach(v=>{ const op=document.createElement('option'); op.value=v.name; op.textContent=`${v.name} (${v.lang})`; sel.appendChild(op); }); }
+        if(speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = populateVoices;
+        populateVoices();
+        document.getElementById('btnSpeak').addEventListener('click', ()=>{
+            const txt = document.getElementById('ttsText').value || (window.lastFilteredNotes && window.lastFilteredNotes.length ? window.lastFilteredNotes.slice(0,5).map(n=>n.text).join('. ') : '');
+            if(!txt) return alert('Texto vacío');
+            const u = new SpeechSynthesisUtterance(txt); u.lang='es-ES';
+            const sel = document.getElementById('ttsVoices'); if(sel.value){ const v = synth.getVoices().find(x=>x.name===sel.value); if(v) u.voice=v; }
+            synth.speak(u);
+        });
+        document.getElementById('btnStopSpeak').addEventListener('click', ()=> synth.cancel());
+        function ttsReadNote(id){ const n = notes.find(x=>x.id===id); if(!n) return; document.getElementById('ttsText').value = `${n.name || 'Entrevistado'} (${n.community||'—'}): ${n.text}`; document.getElementById('btnSpeak').click(); }
+
+        /* ============================
+         Audio Recorder
+         ============================ */
+        const btnStartRecord = document.getElementById('btnStartRecord');
+        const btnStopRecord = document.getElementById('btnStopRecord');
+        const btnPlayRecord = document.getElementById('btnPlayRecord');
+        
+        btnStartRecord.addEventListener('click', async () => {
+            if (!currentUser) return alert('Debes iniciar sesión para grabar.');
+            if (recorder && recorder.state === 'recording') {
+                alert('Ya se está grabando.');
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                recorder = new MediaRecorder(stream);
+                audioChunks = [];
+                recorder.ondataavailable = e => { audioChunks.push(e.data); };
+                
+                recorder.onstop = () => {
+                    btnPlayRecord.style.display = 'inline-block';
+                    btnStartRecord.style.display = 'inline-block';
+                    btnStopRecord.style.display = 'none';
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                recorder.start();
+                btnStartRecord.style.display = 'none';
+                btnStopRecord.style.display = 'inline-block';
+                btnPlayRecord.style.display = 'none';
+                alert('Grabación iniciada.');
+            } catch (err) {
+                alert('Error al acceder al micrófono: ' + err.message);
+            }
+        });
+
+        btnStopRecord.addEventListener('click', () => {
+            if (recorder && recorder.state === 'recording') {
+                recorder.stop();
+                alert('Grabación detenida.');
+            }
+        });
+
+        btnPlayRecord.addEventListener('click', () => {
+            if (audioChunks.length > 0) {
+                const blob = new Blob(audioChunks, { 'type' : 'audio/wav' });
+                const audioUrl = URL.createObjectURL(blob);
+                const audio = new Audio(audioUrl);
+                audio.play();
+            } else {
+                alert('No hay audio para reproducir.');
+            }
+        });
+
+        /* ============================
+         Helpers
+         ============================ */
+        function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>'
+,'&gt;'); }
+        function sanitize(s){ return String(s).replace(/[@.]/g,'_'); }
+        function fileToBase64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
+        function download(name, content, mime){ const blob = new Blob([content], { type: mime||'text/plain' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+        function collectAllMarkers(){ const out={}; Object.keys(localStorage).forEach(k=>{ if(k.startsWith(KEYS.MARKERS_PREFIX)){ try{ out[k] = JSON.parse(localStorage.getItem(k)); }catch(e){} } }); return out; }
+
+        /* ============================
+         Persist/load events (calendar)
+         ============================ */
+        function persistEvents(){ if(!calendar) return; const evs = calendar.getEvents().map(e=>({ title:e.title, start:e.startStr })); localStorage.setItem(KEYS.EVENTS, JSON.stringify(evs)); }
+        function loadEvents(){ try{ return JSON.parse(localStorage.getItem(KEYS.EVENTS) || '[]'); }catch(e){ return []; } }
+
+        /* ============================
+         Markers helpers for current user
+         ============================ */
+        function saveUserMarkers(){ if(!currentUser) return; localStorage.setItem(KEYS.MARKERS_PREFIX + sanitize(currentUser.email), JSON.stringify(userMarkers)); }
+        function loadUserMarkers(){ if(!currentUser) return; userMarkers = JSON.parse(localStorage.getItem(KEYS.MARKERS_PREFIX + sanitize(currentUser.email)) || '[]'); }
+        function renderUserMarkers(){ if(!map) initMap(); // remove old user markers
+            map.eachLayer(layer => { if(layer instanceof L.Marker && layer.options && layer.options._ethno_user) map.removeLayer(layer); });
+            userMarkers.forEach(m => { L.marker([m.lat,m.lng], { _ethno_user:true }).addTo(map).bindPopup(m.title + '<br/><small class="small-muted">Guardado local</small>'); });
+        }
+
+        /* ============================
+         Utility: collect events, init on load
+         ============================ */
+        (function init(){
+            notes = JSON.parse(localStorage.getItem(KEYS.NOTES) || '[]');
+            participants = JSON.parse(localStorage.getItem(KEYS.PARTICIPANTS) || '[]');
+            renderNotes(notes);
+            renderParticipants();
+            updateDashboard();
+            // default show dashboard
+            showPanel('dash');
+        })();
+
+        /* Save/load markers wrappers for UI */
+        function loadMarkersForUser(){ loadUserMarkers(); renderUserMarkers(); }
+        function loadUserMarkers(){ if(!currentUser) return; userMarkers = JSON.parse(localStorage.getItem(KEYS.MARKERS_PREFIX + sanitize(currentUser.email)) || '[]'); }
+        function renderUserMarkers(){ if(!map) initMap(); // remove old user markers
+            map.eachLayer(layer => { if(layer instanceof L.Marker && layer.options && layer.options._ethno_user) map.removeLayer(layer); });
+            userMarkers.forEach(m => { L.marker([m.lat,m.lng], { _ethno_user:true }).addTo(map).bindPopup(m.title + '<br/><small class="small-muted">Guardado local</small>'); });
+        }
+    </script>
+</body>
+</html>
