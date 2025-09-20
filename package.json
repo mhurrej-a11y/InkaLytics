@@ -1,0 +1,12 @@
+{
+  "name": "inkalytics",
+  "version": "1.0.0",
+  "description": "Backend para el proyecto InkaLytics.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
